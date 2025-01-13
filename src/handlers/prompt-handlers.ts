@@ -1,85 +1,53 @@
+import {
+  GetPromptRequest,
+  GetPromptResult,
+  ListPromptsRequest,
+  ListPromptsResult,
+} from "@modelcontextprotocol/sdk/types.js";
 import { SystemPromptService } from "../services/systemprompt-service.js";
-import { CreatePromptInput, PromptCreationResult } from "../types/index.js";
+import {
+  mapPromptToGetPromptResult,
+  mapPromptsToListPromptsResult,
+} from "../utils/mcp-mappers.js";
 
 export async function handleListPrompts(
-  service: SystemPromptService = new SystemPromptService()
-) {
-  const prompts = await service.getAllPrompts();
-
-  return {
-    prompts: prompts.map((prompt) => ({
-      name: prompt.metadata.title,
-      description: prompt.metadata.description,
-      messages: [
-        {
-          role: "system",
-          content: {
-            type: "text",
-            text: prompt.instruction.static,
-          },
-        },
-      ],
-      input_schema: {
-        type: "object",
-        properties: {
-          message: {
-            type: "string",
-            description: prompt.input.description,
-          },
-        },
-        required: [],
-      },
-      output_schema: {
-        type: "object",
-        properties: {
-          message: {
-            type: "string",
-            description: prompt.output.description,
-          },
-        },
-        required: [],
-      },
-    })),
-  };
+  request: ListPromptsRequest
+): Promise<ListPromptsResult> {
+  try {
+    const service = SystemPromptService.getInstance();
+    const prompts = await service.getAllPrompts();
+    return mapPromptsToListPromptsResult(prompts);
+  } catch (error: any) {
+    console.error("Failed to fetch prompts:", error);
+    throw new Error("Failed to fetch prompts from systemprompt.io");
+  }
 }
 
 export async function handleGetPrompt(
-  request: { params: { name: string } },
-  service: SystemPromptService = new SystemPromptService()
-) {
-  const { name } = request.params;
+  request: GetPromptRequest
+): Promise<GetPromptResult> {
+  try {
+    const service = SystemPromptService.getInstance();
+    const prompts = await service.getAllPrompts();
+    const prompt = prompts.find(
+      (p) => p.metadata.title === request.params.name
+    );
 
-  // Get the list of prompts
-  const { prompts } = await handleListPrompts(service);
+    if (!prompt) {
+      throw new Error(`Prompt not found: ${request.params.name}`);
+    }
 
-  // Find the requested prompt
-  const prompt = prompts.find((p) => p.name === name);
-  if (!prompt) {
-    throw new Error("Unknown prompt");
+    return {
+      _meta: { prompt },
+      tools: [],
+      ...mapPromptToGetPromptResult(prompt),
+    };
+  } catch (error: any) {
+    console.error("Failed to fetch prompt:", error);
+    throw new Error(
+      `Failed to fetch prompt from systemprompt.io: ${
+        error.message || "Unknown error"
+      }`
+    );
   }
-
-  return prompt;
-}
-
-export async function createPromptHandler(
-  service: SystemPromptService,
-  input: CreatePromptInput
-): Promise<PromptCreationResult> {
-  if (!input.instruction || !input.input || !input.output || !input.metadata) {
-    throw new Error("Invalid input");
-  }
-
-  return service.createPrompt(input);
-}
-
-export async function editPromptHandler(
-  service: SystemPromptService,
-  uuid: string,
-  input: Partial<CreatePromptInput>
-): Promise<PromptCreationResult> {
-  if (!uuid) {
-    throw new Error("Invalid UUID");
-  }
-
-  return service.editPrompt(uuid, input);
 }

@@ -1,5 +1,7 @@
-import { Implementation } from "@modelcontextprotocol/sdk/types.js";
-import { ServerCapabilities } from "@modelcontextprotocol/sdk/types.js";
+import {
+  Implementation,
+  ServerCapabilities,
+} from "@modelcontextprotocol/sdk/types.js";
 
 export const serverConfig: Implementation = {
   name: "systemprompt-agent-server",
@@ -20,8 +22,12 @@ export const serverConfig: Implementation = {
 
 export const serverCapabilities: { capabilities: ServerCapabilities } = {
   capabilities: {
-    resources: {},
+    resources: {
+      listChanged: true,
+    },
     tools: {},
-    prompts: {},
+    prompts: {
+      listChanged: true,
+    },
   },
 };

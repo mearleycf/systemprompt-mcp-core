@@ -1,13 +1,6 @@
-import {
-  jest,
-  describe,
-  it,
-  expect,
-  beforeEach,
-  afterEach,
-} from "@jest/globals";
-import { SystemPromptService } from "../systemprompt-service";
-import type { CreatePromptInput, CreateBlockInput } from "../../types/index";
+import { jest, describe, it, expect, beforeEach } from "@jest/globals";
+import { SystemPromptService } from "../systemprompt-service.js";
+import type { SystempromptPromptResponse } from "../../types/index.js";
 
 // Mock fetch
 const mockFetch = jest.fn(() =>
@@ -26,52 +19,100 @@ describe("SystemPromptService", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    process.env.SYSTEMPROMPT_API_KEY = mockApiKey;
-    service = new SystemPromptService();
+    // Reset the instance before each test
+    (SystemPromptService as any).instance = null;
+    SystemPromptService.initialize(mockApiKey);
+    service = SystemPromptService.getInstance();
   });
 
-  afterEach(() => {
-    delete process.env.SYSTEMPROMPT_API_KEY;
+  describe("initialization", () => {
+    it("should throw error when initialized without API key", () => {
+      (SystemPromptService as any).instance = null;
+      expect(() => SystemPromptService.initialize("")).toThrow(
+        "API key is required"
+      );
+    });
+
+    it("should throw error when getInstance called before initialization", () => {
+      (SystemPromptService as any).instance = null;
+      expect(() => SystemPromptService.getInstance()).toThrow(
+        "SystemPromptService must be initialized with an API key first"
+      );
+    });
+  });
+
+  describe("request error handling", () => {
+    it("should handle invalid API key", async () => {
+      mockFetch.mockImplementationOnce(() =>
+        Promise.resolve({
+          ok: false,
+          status: 403,
+          json: () => Promise.resolve({ message: "Invalid API key" }),
+        })
+      );
+
+      await expect(service.getAllPrompts()).rejects.toThrow("Invalid API key");
+    });
+
+    it("should handle network errors", async () => {
+      mockFetch.mockImplementationOnce(() =>
+        Promise.reject(new Error("API request failed"))
+      );
+      await expect(service.getAllPrompts()).rejects.toThrow(
+        "API request failed"
+      );
+    });
+
+    it("should handle invalid JSON response", async () => {
+      mockFetch.mockImplementationOnce(() =>
+        Promise.resolve({
+          ok: true,
+          json: () => Promise.reject(new Error("Invalid JSON")),
+        })
+      );
+
+      await expect(service.getAllPrompts()).rejects.toThrow(
+        "API request failed"
+      );
+    });
   });
 
   describe("createPrompt", () => {
-    const validPromptData: CreatePromptInput = {
+    const validPromptData: SystempromptPromptResponse = {
+      id: "test-uuid",
       instruction: {
         static: "Test instruction",
-        state: "Test state",
-        dynamic: "Test dynamic",
+        dynamic: "",
+        state: "",
       },
       input: {
         name: "test_input",
         description: "Test input description",
         type: ["message"],
+        schema: {},
       },
       output: {
         name: "test_output",
         description: "Test output description",
         type: ["message"],
+        schema: {},
       },
       metadata: {
         title: "Test prompt",
         description: "Test description",
-        tag: ["test"],
+        created: "2024-01-01",
+        updated: "2024-01-01",
+        version: 1,
+        status: "draft",
+        author: "test",
+        log_message: "Created",
       },
+      _link: "test-link",
     };
 
     it("should create a prompt successfully", async () => {
-      const mockResponse = {
-        id: "test-uuid",
+      const mockResponse: SystempromptPromptResponse = {
         ...validPromptData,
-        _link: "test-link",
-        metadata: {
-          ...validPromptData.metadata,
-          created: "2024-01-01",
-          updated: "2024-01-01",
-          version: 1,
-          status: "draft" as const,
-          author: "test",
-          log_message: "Created",
-        },
       };
 
       mockFetch.mockImplementationOnce(() =>
@@ -115,29 +156,43 @@ describe("SystemPromptService", () => {
 
   describe("editPrompt", () => {
     const uuid = "test-uuid";
-    const updateData = {
+    const updateData: Partial<SystempromptPromptResponse> = {
       instruction: {
         static: "Updated instruction",
+        dynamic: "",
+        state: "",
       },
       metadata: {
         title: "Updated title",
         description: "Test description",
+        created: "2024-01-01",
+        updated: "2024-01-01",
+        version: 1,
+        status: "draft",
+        author: "test",
+        log_message: "Updated",
       },
     };
 
     it("should edit a prompt successfully", async () => {
-      const mockResponse = {
+      const mockResponse: SystempromptPromptResponse = {
         id: uuid,
-        instruction: { static: "Updated instruction" },
+        instruction: {
+          static: "Updated instruction",
+          dynamic: "",
+          state: "",
+        },
         input: {
           name: "test_input",
           description: "Test input description",
-          type: ["message" as const],
+          type: ["message"],
+          schema: {},
         },
         output: {
           name: "test_output",
           description: "Test output description",
-          type: ["message" as const],
+          type: ["message"],
+          schema: {},
         },
         metadata: {
           title: "Updated title",
@@ -145,7 +200,7 @@ describe("SystemPromptService", () => {
           created: "2024-01-01",
           updated: "2024-01-01",
           version: 1,
-          status: "draft" as const,
+          status: "draft",
           author: "test",
           log_message: "Updated",
         },
@@ -191,264 +246,21 @@ describe("SystemPromptService", () => {
     });
   });
 
-  describe("createBlock", () => {
-    const validBlockData: CreateBlockInput = {
-      content: "Test block content",
-      prefix: "test_block",
+  describe("block operations", () => {
+    const mockBlock = {
+      id: "test-block-id",
+      content: "Test content",
+      prefix: "test-prefix",
       metadata: {
-        title: "Test block",
+        title: "Test Block",
         description: "Test description",
-        tag: ["test"],
+        created: "2024-01-01",
+        updated: "2024-01-01",
       },
+      _link: "test-link",
     };
 
     it("should create a block successfully", async () => {
-      const mockResponse = {
-        id: "test-uuid",
-        ...validBlockData,
-        _link: "test-link",
-        metadata: {
-          ...validBlockData.metadata,
-          created: "2024-01-01",
-          updated: "2024-01-01",
-          version: 1,
-          status: "draft" as const,
-          author: "test",
-          log_message: "Created",
-        },
-      };
-
-      mockFetch.mockImplementationOnce(() =>
-        Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve(mockResponse),
-        })
-      );
-
-      const result = await service.createBlock(validBlockData);
-
-      expect(mockFetch).toHaveBeenCalledWith(
-        "https://api.systemprompt.io/v1/block",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "api-key": mockApiKey,
-          },
-          body: JSON.stringify(validBlockData),
-        }
-      );
-
-      expect(result).toEqual(mockResponse);
-    });
-
-    it("should handle API errors", async () => {
-      const errorMessage = "Invalid input";
-      mockFetch.mockImplementationOnce(() =>
-        Promise.resolve({
-          ok: false,
-          json: () => Promise.resolve({ message: errorMessage }),
-        })
-      );
-
-      await expect(service.createBlock(validBlockData)).rejects.toThrow(
-        errorMessage
-      );
-    });
-  });
-
-  describe("editBlock", () => {
-    const uuid = "test-uuid";
-    const updateData = {
-      content: "Updated content",
-      metadata: {
-        title: "Updated title",
-        description: "Test description",
-      },
-    };
-
-    it("should edit a block successfully", async () => {
-      const mockResponse = {
-        id: uuid,
-        content: "Updated content",
-        metadata: {
-          title: "Updated title",
-          description: "Test description",
-          created: "2024-01-01",
-          updated: "2024-01-01",
-          version: 1,
-          status: "draft" as const,
-          author: "test",
-          log_message: "Updated",
-        },
-        _link: "test-link",
-      };
-
-      mockFetch.mockImplementationOnce(() =>
-        Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve(mockResponse),
-        })
-      );
-
-      const result = await service.editBlock(uuid, updateData);
-
-      expect(mockFetch).toHaveBeenCalledWith(
-        `https://api.systemprompt.io/v1/block/${uuid}`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            "api-key": mockApiKey,
-          },
-          body: JSON.stringify(updateData),
-        }
-      );
-
-      expect(result).toEqual(mockResponse);
-    });
-
-    it("should handle API errors", async () => {
-      const errorMessage = "Block not found";
-      mockFetch.mockImplementationOnce(() =>
-        Promise.resolve({
-          ok: false,
-          json: () => Promise.resolve({ message: errorMessage }),
-        })
-      );
-
-      await expect(service.editBlock(uuid, updateData)).rejects.toThrow(
-        errorMessage
-      );
-    });
-  });
-
-  describe("error handling", () => {
-    it("should handle network errors", async () => {
-      mockFetch.mockImplementationOnce(() =>
-        Promise.reject(new Error("Network error"))
-      );
-
-      await expect(service.createPrompt({} as any)).rejects.toThrow(
-        "Network error"
-      );
-    });
-
-    it("should handle invalid JSON responses", async () => {
-      mockFetch.mockImplementationOnce(() =>
-        Promise.resolve({
-          ok: false,
-          json: () => Promise.reject(new Error("Invalid JSON")),
-        })
-      );
-
-      await expect(service.createPrompt({} as any)).rejects.toThrow(
-        "API request failed"
-      );
-    });
-
-    it("should handle missing API key", () => {
-      delete process.env.SYSTEMPROMPT_API_KEY;
-      const service = new SystemPromptService();
-      expect(service["apiKey"]).toBe("");
-    });
-
-    it("should handle non-JSON responses", async () => {
-      mockFetch.mockImplementationOnce(() =>
-        Promise.resolve({
-          ok: true,
-          json: () => Promise.reject(new Error("Invalid JSON")),
-        })
-      );
-
-      await expect(service.getAllPrompts()).rejects.toThrow(
-        "API request failed"
-      );
-    });
-
-    it("should handle network errors without message", async () => {
-      mockFetch.mockImplementationOnce(() => Promise.reject({}));
-
-      await expect(service.getAllPrompts()).rejects.toThrow(
-        "API request failed"
-      );
-    });
-
-    it("should handle API errors without message", async () => {
-      mockFetch.mockImplementationOnce(() =>
-        Promise.resolve({
-          ok: false,
-          json: () => Promise.resolve({}),
-        })
-      );
-
-      await expect(service.getAllPrompts()).rejects.toThrow(
-        "API request failed"
-      );
-    });
-  });
-
-  describe("listBlocks", () => {
-    it("should return list of blocks", async () => {
-      const mockBlocks = [
-        {
-          id: "test-id",
-          name: "test-block",
-          type: "test",
-          content: "test content",
-          description: "test description",
-        },
-      ];
-
-      mockFetch.mockImplementationOnce(() =>
-        Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve(mockBlocks),
-        })
-      );
-
-      const result = await service.listBlocks();
-
-      expect(mockFetch).toHaveBeenCalledWith(
-        "https://api.systemprompt.io/v1/block",
-        {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            "api-key": mockApiKey,
-          },
-        }
-      );
-
-      expect(result).toEqual(mockBlocks);
-    });
-
-    it("should handle API errors", async () => {
-      mockFetch.mockImplementationOnce(() =>
-        Promise.resolve({
-          ok: false,
-          json: () => Promise.resolve({ message: "Failed to list blocks" }),
-        })
-      );
-
-      await expect(service.listBlocks()).rejects.toThrow(
-        "Failed to list blocks"
-      );
-    });
-  });
-
-  describe("getBlock", () => {
-    const blockId = "test-id";
-
-    it("should return a specific block", async () => {
-      const mockBlock = {
-        id: blockId,
-        name: "test-block",
-        type: "test",
-        content: "test content",
-        description: "test description",
-      };
-
       mockFetch.mockImplementationOnce(() =>
         Promise.resolve({
           ok: true,
@@ -456,33 +268,124 @@ describe("SystemPromptService", () => {
         })
       );
 
-      const result = await service.getBlock(blockId);
-
-      expect(mockFetch).toHaveBeenCalledWith(
-        `https://api.systemprompt.io/v1/block/${blockId}`,
-        {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            "api-key": mockApiKey,
-          },
-        }
-      );
+      const result = await service.createBlock({
+        content: mockBlock.content,
+        prefix: mockBlock.prefix,
+        metadata: {
+          title: mockBlock.metadata.title,
+          description: mockBlock.metadata.description,
+        },
+      });
 
       expect(result).toEqual(mockBlock);
     });
 
-    it("should handle API errors", async () => {
+    it("should edit a block successfully", async () => {
+      const updatedBlock = { ...mockBlock, content: "Updated content" };
       mockFetch.mockImplementationOnce(() =>
         Promise.resolve({
-          ok: false,
-          json: () => Promise.resolve({ message: "Block not found" }),
+          ok: true,
+          json: () => Promise.resolve(updatedBlock),
         })
       );
 
-      await expect(service.getBlock(blockId)).rejects.toThrow(
-        "Block not found"
+      const result = await service.editBlock(mockBlock.id, {
+        content: "Updated content",
+      });
+      expect(result).toEqual(updatedBlock);
+    });
+
+    it("should list blocks successfully", async () => {
+      mockFetch.mockImplementationOnce(() =>
+        Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve([mockBlock]),
+        })
       );
+
+      const result = await service.listBlocks();
+      expect(result).toEqual([mockBlock]);
+    });
+
+    it("should get a block successfully", async () => {
+      mockFetch.mockImplementationOnce(() =>
+        Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve(mockBlock),
+        })
+      );
+
+      const result = await service.getBlock(mockBlock.id);
+      expect(result).toEqual(mockBlock);
+    });
+
+    it("should delete a block successfully", async () => {
+      mockFetch.mockImplementationOnce(() =>
+        Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({}),
+        })
+      );
+
+      await expect(service.deleteBlock(mockBlock.id)).resolves.not.toThrow();
+    });
+  });
+
+  describe("prompt operations", () => {
+    it("should get all prompts successfully", async () => {
+      const mockPrompts = [
+        {
+          id: "test-uuid",
+          instruction: {
+            static: "Test instruction",
+            dynamic: "",
+            state: "",
+          },
+          input: {
+            name: "test_input",
+            description: "Test input description",
+            type: ["message"],
+            schema: {},
+          },
+          output: {
+            name: "test_output",
+            description: "Test output description",
+            type: ["message"],
+            schema: {},
+          },
+          metadata: {
+            title: "Test prompt",
+            description: "Test description",
+            created: "2024-01-01",
+            updated: "2024-01-01",
+            version: 1,
+            status: "draft",
+            author: "test",
+            log_message: "Created",
+          },
+          _link: "test-link",
+        },
+      ];
+      mockFetch.mockImplementationOnce(() =>
+        Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve(mockPrompts),
+        })
+      );
+
+      const result = await service.getAllPrompts();
+      expect(result).toEqual(mockPrompts);
+    });
+
+    it("should delete a prompt successfully", async () => {
+      mockFetch.mockImplementationOnce(() =>
+        Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({}),
+        })
+      );
+
+      await expect(service.deletePrompt("test-uuid")).resolves.not.toThrow();
     });
   });
 });

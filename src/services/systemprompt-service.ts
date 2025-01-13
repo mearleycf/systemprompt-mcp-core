@@ -1,20 +1,38 @@
-import {
-  CreatePromptInput,
-  EditPromptInput,
-  CreateBlockInput,
-  EditBlockInput,
-  PromptCreationResult,
-  BlockCreationResult,
-  Block,
+import type {
+  SystempromptBlockRequest,
+  SystempromptPromptRequest,
+  SystempromptBlockResponse,
+  SystempromptPromptResponse,
 } from "../types/index.js";
 
 export class SystemPromptService {
+  private static instance: SystemPromptService | null = null;
   private apiKey: string;
   private baseUrl: string;
 
-  constructor() {
-    this.apiKey = process.env.SYSTEMPROMPT_API_KEY || "";
+  private constructor(apiKey: string) {
+    if (!apiKey) {
+      throw new Error("API key is required");
+    }
+    this.apiKey = apiKey;
     this.baseUrl = "https://api.systemprompt.io/v1";
+  }
+
+  public static initialize(apiKey: string): void {
+    SystemPromptService.instance = new SystemPromptService(apiKey);
+  }
+
+  public static getInstance(): SystemPromptService {
+    if (!SystemPromptService.instance) {
+      throw new Error(
+        "SystemPromptService must be initialized with an API key first"
+      );
+    }
+    return SystemPromptService.instance;
+  }
+
+  public static cleanup(): void {
+    SystemPromptService.instance = null;
   }
 
   private async request<T>(
@@ -40,6 +58,9 @@ export class SystemPromptService {
       }
 
       if (!response.ok) {
+        if (response.status === 403) {
+          throw new Error("Invalid API key");
+        }
         throw new Error(responseData.message || "API request failed");
       }
 
@@ -52,37 +73,57 @@ export class SystemPromptService {
     }
   }
 
-  async getAllPrompts(): Promise<PromptCreationResult[]> {
-    return this.request<PromptCreationResult[]>("/prompt", "GET");
+  async getAllPrompts(): Promise<SystempromptPromptResponse[]> {
+    return this.request<SystempromptPromptResponse[]>("/prompt", "GET");
   }
 
-  async createPrompt(data: CreatePromptInput): Promise<PromptCreationResult> {
-    return this.request<PromptCreationResult>("/prompt", "POST", data);
+  async createPrompt(
+    data: SystempromptPromptRequest
+  ): Promise<SystempromptPromptResponse> {
+    return this.request<SystempromptPromptResponse>("/prompt", "POST", data);
   }
 
   async editPrompt(
     uuid: string,
-    data: Partial<CreatePromptInput>
-  ): Promise<PromptCreationResult> {
-    return this.request<PromptCreationResult>(`/prompt/${uuid}`, "PUT", data);
+    data: Partial<SystempromptPromptRequest>
+  ): Promise<SystempromptPromptResponse> {
+    return this.request<SystempromptPromptResponse>(
+      `/prompt/${uuid}`,
+      "PUT",
+      data
+    );
   }
 
-  async createBlock(data: CreateBlockInput): Promise<BlockCreationResult> {
-    return this.request<BlockCreationResult>("/block", "POST", data);
+  async createBlock(
+    data: SystempromptBlockRequest
+  ): Promise<SystempromptBlockResponse> {
+    return this.request<SystempromptBlockResponse>("/block", "POST", data);
   }
 
   async editBlock(
     uuid: string,
-    data: Partial<CreateBlockInput>
-  ): Promise<BlockCreationResult> {
-    return this.request<BlockCreationResult>(`/block/${uuid}`, "PUT", data);
+    data: Partial<SystempromptBlockRequest>
+  ): Promise<SystempromptBlockResponse> {
+    return this.request<SystempromptBlockResponse>(
+      `/block/${uuid}`,
+      "PUT",
+      data
+    );
   }
 
-  async listBlocks(): Promise<Block[]> {
-    return this.request<Block[]>("/block", "GET");
+  async listBlocks(): Promise<SystempromptBlockResponse[]> {
+    return this.request<SystempromptBlockResponse[]>("/block", "GET");
   }
 
-  async getBlock(blockId: string): Promise<Block> {
-    return this.request<Block>(`/block/${blockId}`, "GET");
+  async getBlock(blockId: string): Promise<SystempromptBlockResponse> {
+    return this.request<SystempromptBlockResponse>(`/block/${blockId}`, "GET");
+  }
+
+  async deletePrompt(uuid: string): Promise<void> {
+    return this.request<void>(`/prompt/${uuid}`, "DELETE");
+  }
+
+  async deleteBlock(uuid: string): Promise<void> {
+    return this.request<void>(`/block/${uuid}`, "DELETE");
   }
 }
